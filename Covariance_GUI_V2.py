@@ -3,31 +3,21 @@
 #TODO -add posibility to select single track from datafile
 #TODO -add popup error window and text for errors
 #Imports
+import File_analyzer
+import Color_cycler
+import Covariance_vector_calc2D
 import threading
 import time
 from datetime import datetime
-from datetime import date
-import ntpath
-import os.path
 import numpy as np
-from os import path
 import PySimpleGUI as sg
 import math
 from time import sleep
-
-import pylab
 import scipy.linalg as la
-from PySimpleGUI import show_debugger_popout_window
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.cm import get_cmap
 from matplotlib.patches import Ellipse, Polygon
-from matplotlib.patches import Rectangle
 import matplotlib.lines as lines
-from matplotlib.pyplot import hsv
-
-from numpy.core.defchararray import rsplit
 from math import pi, cos, sin
-from matplotlib import pyplot as plt, cycler
+from matplotlib import pyplot as plt
 import matplotlib.transforms as transforms
 
 def fileanalyzer(fileloc, file_size, window, run):
@@ -108,24 +98,41 @@ def fileanalyzer(fileloc, file_size, window, run):
         window['vel_yy_value1'].update(vel_yy_wr)
 
         #Lat lon covariance vectors and angle data
-        lat_lon_vector_data = covariance_vector2D(xx, xy, yy,'Lat Lon')
+        lat_lon_vector_data = Covariance_vector_calc2D.covariance_vector2D(xx, xy, yy) #returns (m)
         lat_lon_x_result = str(lat_lon_vector_data[0])
         lat_lon_y_result = str(lat_lon_vector_data[1])
         lat_lon_angle_data = vector_angle_calc(xx, xy, yy)
+        #DONE - add type change between metrics and imperial units
+        if metric_units:
+            axis_x = float(lat_lon_x_result)
+            axis_y = float(lat_lon_y_result)
+            lat_lon_x_result = str(round(axis_x, 5))
+            lat_lon_y_result = str(round(axis_y, 5))
+        else:
+            if debug_console:
+                window.write_event_value('debug_write', 'Convert X/Y to imperial')
+            axis_x = float(lat_lon_x_result)
+            axis_y = float(lat_lon_y_result)
+            axis_x = axis_x * 3.281
+            lat_lon_x_result = str(round(axis_x, 5))
+            axis_y = axis_y * 3.281
+            lat_lon_y_result = str(round(axis_y, 5))
+
         window['ellip_x'].update(lat_lon_x_result)
         window['ellip_y'].update(lat_lon_y_result)
         lat_lon_angle = lat_lon_angle_data[1]
         lat_lon_angle = round(lat_lon_angle,1)
         window["ellip_ang"].update(lat_lon_angle)
-
+        #TODO - add conversion between metric and imperial units
         # Alt covariance vectors and angle data
-        alt_vector_data = covariance_vector2D(yy, zy, zz, 'Alt')
+        alt_vector_data = Covariance_vector_calc2D.covariance_vector2D(yy, zy, zz) #returns (m)
         alt_z_result = str(alt_vector_data[0])
         alt_y_result = str(alt_vector_data[1])
         alt_angle_data = vector_angle_calc(xz, zy, yy)
 
+        # TODO - add conversion between metric and imperial units
         # Velocity uncert vectors and angle data
-        vel_vector_data = covariance_vector2D(vel_xx, vel_xy, vel_yy, 'Vel')
+        vel_vector_data = Covariance_vector_calc2D.covariance_vector2D(vel_xx, vel_xy, vel_yy) #returns (m/s)
 
         vel_x_result = str(vel_vector_data[0])
         vel_y_result = str(vel_vector_data[1])
@@ -191,6 +198,8 @@ def fileanalyzer(fileloc, file_size, window, run):
         #return file_analyzer_thread_run
 
 
+
+#This isnt used anymore -- can be cleaned away ----
 def filereader(fileloc):
     try:
         initfile = []
@@ -208,6 +217,7 @@ def filereader(fileloc):
 
     except Exception as e:
         window['print'].print("ERROR: " + str(e))
+#---- End of to be cleaned ------
 
 def manualanalyzer():
     print('manualanalyzer')
@@ -224,7 +234,7 @@ def print_debug(thread_name,run_freq,window2,write,file):
             sg.Popup('Main window not open')
         #window2['debug_con'].print(write)
 
-def covariance_vector2D(xx, xy, yy, type):
+def covariance_vector2D(xx, xy, yy): # Can be cleaned
 
     #print("Covariance matrix values")
     # Set array values
@@ -259,50 +269,13 @@ def covariance_vector2D(xx, xy, yy, type):
     lamda_1 = lamda_1.real
     lamda_2 = lamda_2.real
 
-    #TODO - add handling for different datatypes m-ft and m/s - ft/s
-    # Change units from m2 to m
     lamda_1 = math.sqrt(lamda_1)
     lamda_2 = math.sqrt(lamda_2)
     axis_x = 2*(math.sqrt(lamda_1))
     axis_y = 2*(math.sqrt(lamda_2))
-
-    # Change units and return values
-    if metric_units:
-        axis_x = round(axis_x, 5)
-        axis_y = round(axis_y, 5)
-        return axis_x, axis_y
-    else:
-        axis_x = axis_x*3.281
-        axis_x = round(axis_x, 5)
-        axis_y = axis_y*3.281
-        axis_y = round(axis_y, 5)
-        return axis_x, axis_y
+    return axis_x, axis_y
 
 
-def covariance_eigen_vector_cleaner(eigenvectors_result_str):
-    eigenvector_list = []
-    for i in eigenvectors_result_str:
-        i = i.strip(' ')
-        i = i.strip('\n')
-        i = i.strip('[')
-        i = i.strip('[')
-        i = i.strip(']')
-        i = i.strip(']')
-        """ Returns True is string is a number. """
-        try:
-            float(i)
-            numeric = True
-        except ValueError:
-            numeric = False
-
-        if numeric:
-            add_0 = '0'
-            i_lenght = len(i)
-            point_place = i.find('.')
-            if i_lenght == point_place+1:
-                i = i+add_0
-            eigenvector_list.append(i)
-    return eigenvector_list
 
 
 def track_data_reader(file_to_process, data_set_read, end_of_file, lines_in_file):
@@ -503,7 +476,7 @@ def update_rate_resolver(time_tag, time_tag_old):
 
 
 def vector_angle_calc(rep_xx, rep_xy, rep_yy):
-    # print('----------Vector calculations-----------')
+    #('----------Vector calculations-----------')
     A = np.array([[rep_xx, rep_xy],[rep_xy, rep_yy]])
     angle_x = True
     results = la.eig(A)
@@ -523,50 +496,7 @@ def vector_angle_calc(rep_xx, rep_xy, rep_yy):
     return angle1, angle2
 
 
-def calc_ellipse(xx,xy, yy, yx):
-    # Heading parameters
-    hdg_x = 15000
-    hdg_y = 15000
-    angle = 90
-    length = 7500
-    # print('----------Vector calculations-----------')
-    A = np.array([[xx, xy], [xy, yy]])
-    eigvals, eigvecs = la.eig(A)
-    eigvals = eigvals.real
-    lambda1 = eigvals[0]
-    lambda2 = eigvals[1]
-    rep_xx = float(xx)
-    rep_yy = float(yy)
-    rep_xy = float(xy)
-    lambda_arc1 = math.atan2(lambda1 - rep_xx, rep_xy)
-    lambda_arc2 = math.atan2(lambda2 - rep_xx, rep_xy)
 
-    u = 1.  # x-position of the center
-    v = 0.5  # y-position of the center
-    a = 18562.070652493334  # radius on the x-axis
-    b = 23606.251428713906  # radius on the y-axis
-    t_rot = pi / 4  # rotation angle
-
-    t = np.linspace(0, 2 * pi, 100)
-    Ell = np.array([a * np.cos(t), b * np.sin(t)])
-    # u,v removed to keep the same center location
-    R_rot = np.array([[cos(t_rot), -sin(t_rot)], [sin(t_rot), cos(t_rot)]])
-    # 2-D rotation matrix
-
-    Ell_rot = np.zeros((2, Ell.shape[1]))
-    for i in range(Ell.shape[1]):
-        Ell_rot[:, i] = np.dot(R_rot, Ell[:, i])
-
-    # find the end point
-    endy = hdg_x + length * math.sin(math.radians(angle))
-    endx = length * math.cos(math.radians(angle))
-
-    plt.plot([0,endx], [0, endy], color="red")
-    #plt.plot(u + Ell[0, :], v + Ell[1, :])  # initial ellipse
-    plt.plot(u + Ell_rot[0, :], v + Ell_rot[1, :], 'darkorange')  # rotated ellipse
-    plt.grid(color='lightgray', linestyle='--')
-    plt.show()
-    #return plt
 
 
 def get_correlated_dataset(n, dependency, mu, scale):
@@ -738,8 +668,9 @@ def draw_ellipse_canvas_test(draw_x, draw_y, count, draws, data_set):
         return draws
 
 def on_close(event):
-    print('Closed window')
-    print('Reopen window')
+
+    if debug_console:
+        window.write_event_value('debug_write', 'Canvas window closed - reopening')
     fig, ax = plt.subplots(subplot_kw={'aspect': 'equal'}, label='Uncertainty area')
     canvas = True
     new_window = True
@@ -754,6 +685,7 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
     draw_x = float(x)*2
     draw_y = float(y)*2
     hdg = float(heading)
+    #print('draw_ell:'+str(draw_ell))
     #window.write_event_value('debug_write', 'Draw X/Y:' + str(draw_x) + ',' + str(draw_y))
     draws = draws
     window_label = 'Dataset '+str(data_set)
@@ -763,24 +695,24 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
     # Check if window is closed
     fig.canvas.mpl_connect('close_event', on_close)
 
-   #TODO -create own color cycler for ellipse colors cycler('color', ['r','b','g','y'])
+   #DONE -create own color cycler for ellipse colors cycler('color', ['blue', 'green', 'red', 'cyan', 'purple', 'yellow','black', 'dodgerblue', 'sienna', 'crimson')
 
+    ellipse_draw_color = Color_cycler.color_cycler(data_set)
+    bbox_color_adder = str(int(data_set)+2)
+    bbox_draw_color = Color_cycler.color_cycler(bbox_color_adder)
 
     if count == 'ALL':
-        #print('ALL Draws:' + str(draws))
-        window.write_event_value('debug_write', 'ALL Draws:' + str(draws))
-        #fig, ax = plt.subplots(subplot_kw={'aspect':'equal'}, label=window_label)
-        ellipse = Ellipse((0,0), width=draw_x, height=draw_y, angle=ell_angle, edgecolor='b', alpha=0.2, linewidth=2, facecolor='none')
 
-        #ellipse2 = Ellipse((0, 0), width=2, height=2, angle=0, alpha=0.1, visible=False)
-        #ellipse.set_color('red')
-        #ellipse2.set_color('blue')
+        if debug_console:
+            window.write_event_value('debug_write', 'ALL Draws:' + str(draws))
+
+        ellipse = Ellipse((0,0), width=draw_x, height=draw_y, angle=ell_angle, edgecolor=ellipse_draw_color, alpha=0.3, linewidth=2, facecolor='none')
 
         #vertice calculation
         path = ellipse.get_path()
         vertices = path.vertices.copy()
         vertices = ellipse.get_patch_transform().transform(vertices)
-        #window.write_event_value('debug_write', 'Vertices:' + str(vertices))
+
         if draw_bbox:
 
             box_c1_x = vertices[3,[0]]
@@ -799,11 +731,11 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
             box_c4_x = box_c4_x[0]-10
             box_c4_y = vertices[21, [1]]
             box_c4_y = box_c4_y[0]+10
+            if debug_console:
+                window.write_event_value('debug_write', 'Box X/Y and angle:' + str(box_c1_x)+','+str(box_c1_y))
+            #DONE - needs to calculate correct position from unc ell radius
 
-            window.write_event_value('debug_write', 'Box X/Y and angle:' + str(box_c1_x)+','+str(box_c1_y))
-            #TODO - needs to calculate correct position from unc ell radius
-            #box = Rectangle((box_x,box_y),draw_x,draw_y,0,alpha=0.1,linewidth=1,edgecolor='y', facecolor=None)
-            box =Polygon([(box_c1_x,box_c1_y),(box_c2_x,box_c2_y),(box_c3_x,box_c3_y),(box_c4_x,box_c4_y)],closed=True, alpha=0.2, facecolor='none', edgecolor='y', linewidth=1)
+            box =Polygon([(box_c1_x,box_c1_y),(box_c2_x,box_c2_y),(box_c3_x,box_c3_y),(box_c4_x,box_c4_y)],closed=True, alpha=0.2, facecolor='none', edgecolor=bbox_draw_color, linewidth=1)
         #plot y-axis
         y_arrow_x = [0,vertices[12,[0]]]
         y_arrow_y = [0,vertices[12,[1]]]
@@ -918,14 +850,16 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
 
         #add ellipse
         if draw_ell:
-            window.write_event_value('debug_write', 'Add ellipse')
+            if debug_console:
+                window.write_event_value('debug_write', 'Add ellipse')
             ax.add_artist(ellipse)
 
         #add bbox
         if draw_bbox:
-            window.write_event_value('debug_write', 'Add box')
+            if debug_console:
+                window.write_event_value('debug_write', 'Add box')
             ax.add_artist(box)
-        #ax.add_artist(ellipse2)
+
         #add vectors
 
         if data_set == '1':
@@ -944,26 +878,48 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
         ax.set_ylim(-1.2*(draw_y), 1.2*draw_y)
 
         ax.set_title('Dataset - '+data_set)
-        #ax.show(block=False)
+
         draws = draws+1
         plt.show(block=False)
 
         return draws
 
     elif draws < count:
-        window.write_event_value('debug_write', 'Cont Draws:'+str(draws))
-        # fig, ax = plt.subplots(subplot_kw={'aspect':'equal'}, label=window_label)
-        ellipse = Ellipse((0, 0), width=draw_x, height=draw_y, angle=ell_angle, edgecolor='b', alpha=0.1, linewidth=2,
-                          facecolor='none')
-        # ellipse2 = Ellipse((0, 0), width=2, height=2, angle=0, alpha=0.1, visible=False)
-        # ellipse.set_color('red')
-        # ellipse2.set_color('blue')
+        if debug_console:
+            window.write_event_value('debug_write', 'ALL Draws:' + str(draws))
 
-        # arrows
+        ellipse = Ellipse((0, 0), width=draw_x, height=draw_y, angle=ell_angle, edgecolor=ellipse_draw_color, alpha=0.3,
+                          linewidth=2, facecolor='none')
+
+        # vertice calculation
         path = ellipse.get_path()
         vertices = path.vertices.copy()
         vertices = ellipse.get_patch_transform().transform(vertices)
 
+        if draw_bbox:
+
+            box_c1_x = vertices[3, [0]]
+            box_c1_x = box_c1_x[0] - 10
+            box_c1_y = vertices[3, [1]]
+            box_c1_y = box_c1_y[0] - 10
+            box_c2_x = vertices[9, [0]]
+            box_c2_x = box_c2_x[0] + 10
+            box_c2_y = vertices[9, [1]]
+            box_c2_y = box_c2_y[0] - 10
+            box_c3_x = vertices[15, [0]]
+            box_c3_x = box_c3_x[0] + 10
+            box_c3_y = vertices[15, [1]]
+            box_c3_y = box_c3_y[0] + 10
+            box_c4_x = vertices[21, [0]]
+            box_c4_x = box_c4_x[0] - 10
+            box_c4_y = vertices[21, [1]]
+            box_c4_y = box_c4_y[0] + 10
+            if debug_console:
+                window.write_event_value('debug_write', 'Box X/Y and angle:' + str(box_c1_x) + ',' + str(box_c1_y))
+            # DONE - needs to calculate correct position from unc ell radius
+
+            box = Polygon([(box_c1_x, box_c1_y), (box_c2_x, box_c2_y), (box_c3_x, box_c3_y), (box_c4_x, box_c4_y)],
+                          closed=True, alpha=0.2, facecolor='none', edgecolor=bbox_draw_color, linewidth=1)
         # plot y-axis
         y_arrow_x = [0, vertices[12, [0]]]
         y_arrow_y = [0, vertices[12, [1]]]
@@ -996,7 +952,7 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
             hdg_y = draw_x / 2
             hdg_arrow_x = [0, hdg_x]
             hdg_arrow_y = [0, hdg_y]
-            ax.plot(hdg_arrow_x, hdg_arrow_y, marker='3', label='HDG', color='g')
+            ax.plot(hdg_arrow_x, hdg_arrow_y, marker='3', label='HDG ' + str(hdg), color='g')
         elif 45 < hdg < 90:
             hdg_x = draw_x / 2
             hdg_y = 0 + (hdg - 45) * hdg_draw_x
@@ -1077,8 +1033,17 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
             ax.plot(hdg_arrow_x, hdg_arrow_y, marker='3', label='HDG', color='g')
 
         # add ellipse
-        ax.add_artist(ellipse)
-        # ax.add_artist(ellipse2)
+        if draw_ell:
+            if debug_console:
+                window.write_event_value('debug_write', 'Add ellipse')
+            ax.add_artist(ellipse)
+
+        # add bbox
+        if draw_bbox:
+            if debug_console:
+                window.write_event_value('debug_write', 'Add box')
+            ax.add_artist(box)
+
         # add vectors
 
         if data_set == '1':
@@ -1097,8 +1062,8 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
         ax.set_ylim(-1.2 * (draw_y), 1.2 * draw_y)
 
         ax.set_title('Dataset - ' + data_set)
-        # ax.show(block=False)
-        draws = draws+1
+
+        draws = draws + 1
         plt.show(block=False)
 
         return draws
@@ -1107,19 +1072,41 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
         ax.clear()
         #plt.clf()
         draws = 0
-        window.write_event_value('debug_write', 'Clear Draws:' + str(draws))
-        # fig, ax = plt.subplots(subplot_kw={'aspect':'equal'}, label=window_label)
-        ellipse = Ellipse((0, 0), width=draw_x, height=draw_y, angle=ell_angle, edgecolor='b', alpha=0.1, linewidth=2,
-                          facecolor='none')
-        # ellipse2 = Ellipse((0, 0), width=2, height=2, angle=0, alpha=0.1, visible=False)
-        # ellipse.set_color('red')
-        # ellipse2.set_color('blue')
+        if debug_console:
+            window.write_event_value('debug_write', 'ALL Draws:' + str(draws))
 
-        # arrows
+        ellipse = Ellipse((0, 0), width=draw_x, height=draw_y, angle=ell_angle, edgecolor=ellipse_draw_color, alpha=0.3,
+                          linewidth=2, facecolor='none')
+
+        # vertice calculation
         path = ellipse.get_path()
         vertices = path.vertices.copy()
         vertices = ellipse.get_patch_transform().transform(vertices)
 
+        if draw_bbox:
+
+            box_c1_x = vertices[3, [0]]
+            box_c1_x = box_c1_x[0] - 10
+            box_c1_y = vertices[3, [1]]
+            box_c1_y = box_c1_y[0] - 10
+            box_c2_x = vertices[9, [0]]
+            box_c2_x = box_c2_x[0] + 10
+            box_c2_y = vertices[9, [1]]
+            box_c2_y = box_c2_y[0] - 10
+            box_c3_x = vertices[15, [0]]
+            box_c3_x = box_c3_x[0] + 10
+            box_c3_y = vertices[15, [1]]
+            box_c3_y = box_c3_y[0] + 10
+            box_c4_x = vertices[21, [0]]
+            box_c4_x = box_c4_x[0] - 10
+            box_c4_y = vertices[21, [1]]
+            box_c4_y = box_c4_y[0] + 10
+            if debug_console:
+                window.write_event_value('debug_write', 'Box X/Y and angle:' + str(box_c1_x) + ',' + str(box_c1_y))
+            # DONE - needs to calculate correct position from unc ell radius
+
+            box = Polygon([(box_c1_x, box_c1_y), (box_c2_x, box_c2_y), (box_c3_x, box_c3_y), (box_c4_x, box_c4_y)],
+                          closed=True, alpha=0.2, facecolor='none', edgecolor=bbox_draw_color, linewidth=1)
         # plot y-axis
         y_arrow_x = [0, vertices[12, [0]]]
         y_arrow_y = [0, vertices[12, [1]]]
@@ -1152,7 +1139,7 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
             hdg_y = draw_x / 2
             hdg_arrow_x = [0, hdg_x]
             hdg_arrow_y = [0, hdg_y]
-            ax.plot(hdg_arrow_x, hdg_arrow_y, marker='3', label='HDG', color='g')
+            ax.plot(hdg_arrow_x, hdg_arrow_y, marker='3', label='HDG ' + str(hdg), color='g')
         elif 45 < hdg < 90:
             hdg_x = draw_x / 2
             hdg_y = 0 + (hdg - 45) * hdg_draw_x
@@ -1233,9 +1220,19 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
             ax.plot(hdg_arrow_x, hdg_arrow_y, marker='3', label='HDG', color='g')
 
         # add ellipse
-        ax.add_artist(ellipse)
-        # ax.add_artist(ellipse2)
+        if draw_ell:
+            if debug_console:
+                window.write_event_value('debug_write', 'Add ellipse')
+            ax.add_artist(ellipse)
+
+        # add bbox
+        if draw_bbox:
+            if debug_console:
+                window.write_event_value('debug_write', 'Add box')
+            ax.add_artist(box)
+
         # add vectors
+
 
         # set legend
         ax.legend()
@@ -1252,8 +1249,8 @@ def draw_ellipse_canvas_test2(x, y, heading, ell_angle, count, draws, data_set, 
         ax.set_ylim(-1.2 * (draw_y), 1.2 * draw_y)
 
         ax.set_title('Dataset - ' + data_set)
-        # ax.show(block=False)
-        draws = draws+1
+
+        draws = draws + 1
         plt.show(block=False)
 
         return draws
@@ -1303,8 +1300,9 @@ def file_size_resolver(file_loc):
     # Open file
     try:
         f = open(file, "r")
-        window.write_event_value('debug_write - ', 'file opened')
-        print('file opened')
+        if debug_console:
+            window.write_event_value('debug_write - ', 'file opened')
+        #print('file opened')
         for x in f:
             lines_in_file = lines_in_file+1
 
@@ -1361,6 +1359,7 @@ def file_size_resolver(file_loc):
 
     except Exception as e:
         sg.Popup('ERROR'+'\n'+str(e),non_blocking=True)
+
 
 def manual_input_resolver(manual_xx_xy_yy, manual_zz_zx_zy):
     xx_loc = manual_xx_xy_yy.find('XX:')
@@ -1453,6 +1452,7 @@ data_set_combo_list = ['ALL', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50]
 track_combo_list = ['ALL']
 fileanalyzer_done = False
 canvas = False
+new_window = False
 debug_write = ''
 debug_write_file = ''
 debug_win_open = False
@@ -1547,8 +1547,11 @@ while True:
     if event == "importfile":
         # DONE - add handling for canceled fileloc selection
         fileloc = values["importfile"]
+        #print(fileloc)
         if fileloc != '':
-            output = file_size_resolver(fileloc)
+            output = File_analyzer.file_analyzer(fileloc)
+            print(output)
+            #output = file_size_resolver(fileloc)
             data_file_size = output[0]
             data_sets_found = output[1]
             window['print1'].print(str(data_sets_found)+" datasets found in file")
@@ -1564,7 +1567,7 @@ while True:
             dist_units = 'ft'
             spd_units = 'ft/s'
     if event == 'debug_pop':
-        # TODO -- write more code to prevent opening debug when thread is running
+        # DONE -- write more code to prevent opening debug when thread is running -> moved debugger into own thread
         sg.show_debugger_popout_window()
     if event == 'debug_win':
         #DONE -write more code to prevent opening debug when thread is running -> moved debug to its own thread
@@ -1609,21 +1612,24 @@ while True:
     if event == 'calculate1_enable':
         window['calculate1'].update(disabled=False)
     if event == "draw_unc_area":
-        window.write_event_value('debug_write', 'Draw uncertainty area')
+        if debug_console:
+            window.write_event_value('debug_write', 'Draw uncertainty area')
         clean = False
         draw_x = values["ellip_x"]
         draw_y = values["ellip_y"]
         data_set = values['dataset']
-        window.write_event_value('debug_write', 'Dataset:'+str(data_set))
+        if debug_console:
+            window.write_event_value('debug_write', 'Dataset:'+str(data_set))
         ellipse_draw_count = values["draw_combo"]
-        window.write_event_value('debug_write', 'Data for drawer: '+str(ellipse_draw_count) + ' ' + str(ellipse_draws))
+        if debug_console:
+            window.write_event_value('debug_write', 'Data for drawer: '+str(ellipse_draw_count) + ' ' + str(ellipse_draws))
         heading = values["trk_hdg"]
         angle = values["ellip_ang"]
         if not canvas:
             fig, ax = plt.subplots(subplot_kw={'aspect': 'equal'}, label='Uncertainty area')
             canvas = True
-
-            window.write_event_value('debug_write',
+            if debug_console:
+                window.write_event_value('debug_write',
                                      'Canvas created:' + str(canvas))
 
         else:
@@ -1632,15 +1638,17 @@ while True:
             else:
                 clean = False
 
-        output = draw_ellipse_canvas_test2(draw_x, draw_y, heading,angle ,ellipse_draw_count, ellipse_draws, data_set, fig, ax, clean,draw_bound_box,draw_cov_ell)
+        output = draw_ellipse_canvas_test2(draw_x, draw_y, heading,angle ,ellipse_draw_count, ellipse_draws, data_set, fig, ax, clean,draw_bound_box,draw_unc_ell)
         ellipse_draws = output
-        window.write_event_value('debug_write',
+        if debug_console:
+            window.write_event_value('debug_write',
                                  'Output - Unc area draws:'+str(ellipse_draws))
             #TODO -add handling for canvas settings -> user can start new canvas when opening new file or restart olr file.
 
 
     if event == "draw_cov_ell":
-        window.write_event_value('debug_write',
+        if debug_console:
+            window.write_event_value('debug_write',
                                  'Draw covariance ellipse event')
         #TODO -add code to perform covariance ellipse draw
 
@@ -1648,9 +1656,9 @@ while True:
         window.write_event_value('draw_unc_ell', 'fileanalyzer_done')
         window.write_event_value('draw_cov_ell', 'fileanalyzer_done')
         window.write_event_value('draw_bound_box', 'fileanalyzer_done')
-
-        window.write_event_value('debug_write',
-                                 'Thread_event_update')
+        if debug_console:
+            window.write_event_value('debug_write',
+                                     'Thread_event_update')
 
     if event == 'calc2_test':
         vec_x = 68.1212154
@@ -1681,10 +1689,16 @@ while True:
         window['print2'].print(output)
     if event == "bool_cov_ell":
         draw_cov_ell = not draw_cov_ell
+        if debug_console:
+            window.write_event_value('debug_write', 'bool_cov_ell:'+str(draw_cov_ell))
     if event == "bool_unc_ell":
         draw_unc_ell = not draw_unc_ell
+        if debug_console:
+            window.write_event_value('debug_write', 'bool_unc_ell:'+str(draw_unc_ell))
     if event == "bool_bound_box":
         draw_bound_box = not draw_bound_box
+        if debug_console:
+            window.write_event_value('debug_write', 'bool_bound_box:'+str(draw_bound_box))
     if event == "draw_combo":
         ellipse_draw_count = values["draw_combo"]
 
